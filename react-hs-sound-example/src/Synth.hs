@@ -24,7 +24,6 @@ data Param
 data Synth
   = Osc WaveForm Double Param (Maybe Double)
   | Gain [Synth] Param
-  | Dc Param (Maybe Double)
   | Filter FilterType [Synth] Param Param
   | Let String Synth Synth
   | Var String
@@ -101,32 +100,6 @@ mkParam ac environment t0 param p =
 mkNode :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> IO AudioNode
 mkNode ac environment t0 synth =
   case synth of
-    Dc amp mb_dur -> do
-      --sp <- createScriptProcessor ac 512 Nothing Nothing
-      --addEventListener sp ("audioprocess" :: String) (error "") False
-
-      error ""
---    Dc amp mb_dur -> do
---      osc <- createOscillator ac
---      --setType osc OscillatorTypeCustom
---      rea <- createFloat32Array 1.0
---      img <- createFloat32Array 1.0
---      pw <- createPeriodicWave ac rea img
---
---      setPeriodicWave osc (Just pw)
---      --freq_param <- getFrequency osc
---      --mkParam ac environment t0 freq_param p
---      gain <- createGain ac
---      gain_param <- getGain gain
---      mkParam ac environment t0  gain_param amp
---      connect osc gain Nothing Nothing
---      start osc (Just t0)
---      case mb_dur of
---        Nothing -> return ()
---        Just dur ->
---          stop osc (Just (t0 + dur))
---      return $ toAudioNode gain
-
     Osc wf amp p mb_dur -> do
       osc <- createOscillator ac
       setType osc (getWaveFormType wf)

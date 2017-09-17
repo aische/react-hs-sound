@@ -243,17 +243,6 @@ pGain = do
     empty
 
 
-pDc :: Parser Expr
-pDc = do
-  s1 <- pNameUppercase
-  if s1 == "DC" then do
-    e1 <- pExpr
-    e2 <- pExpr
-    return (DcExpr e1 e2)
-  else
-    empty
-
-
 pFilterType :: Parser FilterType
 pFilterType = do
   s1 <- pNameUppercase
@@ -354,7 +343,7 @@ pOp1 = do
 
 
 pExpr :: Parser Expr
-pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pDc <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth
+pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth
 
 
 parseExpr :: String -> Maybe Expr

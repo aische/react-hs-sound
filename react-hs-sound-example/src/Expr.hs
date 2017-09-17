@@ -283,25 +283,6 @@ eval environment expr =
         _ ->
           error "Osc: dur not a float"
 
-    DcExpr amp dur -> do
-      amp' <- eval environment amp
-      dur' <- eval environment dur
-      case dur' of
-        FloatValue duration ->
-          case valueToParam amp' of
-            Just p ->
-              return (SynthValue $ Dc p (Just duration))
-            _ ->
-              error "unknown param type"
-        IntValue duration ->
-          case valueToParam amp' of
-            Just p ->
-              return (SynthValue $ Dc p (Just $ fromIntegral duration))
-            Nothing ->
-              error "unknown param type"
-        _ ->
-          error "Osc: dur not a float"
-
     GainExpr inputs gain -> do
       inputs' <- mapM (eval environment) inputs
       gain' <- eval environment gain
