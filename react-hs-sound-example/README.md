@@ -9,6 +9,8 @@ compile:
     
 open html/sound.html
 
+[live demo](https://dvde.biz/ghcjs-audio/)
+
 #### about
 
 
