@@ -1,0 +1,21 @@
+
+svg {
+	font-family: monospace;
+	font-size: 14px;
+}
+
+.lambdatextinput {
+	width: 100%;
+	height: 200px;
+}
+
+
+.steps {
+	display: flex;
+	flex-flow: row wrap ;
+}
+
+.step {
+	position: relative;
+	width: 50px;
+}
