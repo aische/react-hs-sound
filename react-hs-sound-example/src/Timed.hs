@@ -12,38 +12,38 @@ commandLatency :: Double
 commandLatency = 0.2
 
 
-data Timed a = Timed { unTimed :: AudioContext -> Double -> OpenThreads -> [(String, Either Synth AudioNode)] -> IO (a, Double) }
+data Timed a = Timed { unTimed :: AudioContext -> Double -> OpenThreads -> [(String, Either Synth AudioNode)] -> ScheduledFinalizers -> IO (a, Double) }
 
 
 instance Functor Timed where
-  fmap f (Timed g) = Timed $ \ac t ots env -> do
-    (a, t') <- g ac t ots env
+  fmap f (Timed g) = Timed $ \ac t ots env sf -> do
+    (a, t') <- g ac t ots env sf
     return (f a, t')
 
 
 instance Applicative Timed where
-  pure a = Timed $ \_ac t _ots _env -> return (a, t)
-  Timed mf <*> Timed ma = Timed $ \ac t ots env -> do
-    (f, t') <- mf ac t ots env
-    (a, t'') <- ma ac t' ots env
+  pure a = Timed $ \_ac t _ots _env sf -> return (a, t)
+  Timed mf <*> Timed ma = Timed $ \ac t ots env sf -> do
+    (f, t') <- mf ac t ots env sf
+    (a, t'') <- ma ac t' ots env sf
     return (f a, t'')
 
 
 instance Monad Timed where
-  return a = Timed $ \_ac t _ots _env -> return (a, t)
-  Timed m >>= f = Timed $ \ac t ots env -> do
-    (a, t') <- m ac t ots env
-    unTimed (f a) ac t' ots env
+  return a = Timed $ \_ac t _ots _env sf -> return (a, t)
+  Timed m >>= f = Timed $ \ac t ots env sf -> do
+    (a, t') <- m ac t ots env sf
+    unTimed (f a) ac t' ots env sf
 
 
 liftTimed :: IO a -> Timed a
-liftTimed ioa = Timed $ \_ac time _ots _env -> do
+liftTimed ioa = Timed $ \_ac time _ots _env sf -> do
     a <- ioa
     return (a, time)
 
 
 wait :: Double -> Timed ()
-wait t = Timed $ \ac time _ots _env -> do
+wait t = Timed $ \ac time _ots _env sf -> do
   let time' = time + t
   currentTime <- getCurrentTime ac
   let delayTime = round ((time' - currentTime) * 1000000)
@@ -55,9 +55,11 @@ wait t = Timed $ \ac time _ots _env -> do
 
 
 playSynth :: Synth -> Timed ()
-playSynth synth = Timed $ \ac time _ots env -> do
-  node <- mkNode ac env (time + commandLatency) synth
-  getDestination ac >>= \dest -> connect node dest Nothing Nothing
+playSynth synth = Timed $ \ac time _ots env sf -> do
+  (node, t1) <- mkNode ac env (time + commandLatency) synth
+  dest <- getDestination ac
+  connect node dest Nothing Nothing
+  addScheduledFinalizer sf (t1, disconnect node Nothing)
   return ((), time)
 
 
@@ -87,7 +89,7 @@ runScheduledFinalizers :: ScheduledFinalizers -> Double -> IO ()
 runScheduledFinalizers mvar time =
   let
     loop ((t, io) : xs) =
-      if t >= time then do
+      if t < time then do
         io
         loop xs
       else do

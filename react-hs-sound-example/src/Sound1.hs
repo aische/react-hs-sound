@@ -79,7 +79,7 @@ playSound1 audioCtx sound1 t = do
 
 
 playS1 :: Float -> Timed ()
-playS1 freq = Timed $ \ac time _ots _env -> do
+playS1 freq = Timed $ \ac time _ots _env sf -> do
   playSound1 ac (defaultSound1a { sound1Freq = freq }) (time + commandLatency)
   return ((), time)
 
@@ -101,9 +101,9 @@ runCommand c =
   case c of
     Wait t -> wait t
     Play freq -> playS1 freq
-    Fork cs -> Timed $ \ac t ots env -> do
+    Fork cs -> Timed $ \ac t ots env sf -> do
       tid <- forkIO $ do
-        _ <- unTimed (mapM_ runCommand cs) ac t ots env
+        _ <- unTimed (mapM_ runCommand cs) ac t ots env sf
         myThreadId >>= removeOpenThread ots
         return ()
       addOpenThread ots tid
@@ -125,8 +125,9 @@ runProgram cs synthDefs = do
   ac <- newAudioContext
   t <- getCurrentTime ac
   ots <- newMVar []
+  sf <- newMVar []
   tid <- forkIO $ do
-    (_, _) <- unTimed (mapM_ runCommand cs) ac t ots synthDefs
+    (_, _) <- unTimed (mapM_ runCommand cs) ac t ots synthDefs sf
     myThreadId >>= removeOpenThread ots
     return ()
   addOpenThread ots tid

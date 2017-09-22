@@ -148,9 +148,9 @@ applyStatement environment value =
           error "wait: not a number"
 
     ForkStatement e enext -> do
-      Timed $ \ac t ots env -> do
+      Timed $ \ac t ots env sf -> do
         tid <- forkIO $ do
-          _ <- unTimed (eval environment e >>= evalStatement) ac t ots env
+          _ <- unTimed (eval environment e >>= evalStatement) ac t ots env sf
           myThreadId >>= removeOpenThread ots
           return ()
         addOpenThread ots tid
@@ -508,15 +508,32 @@ valueToParam value =
       Nothing
 
 
+finalizerLoop :: Timed ()
+finalizerLoop = do
+  Timed $ \_ac time _ots _env sf -> do
+    runScheduledFinalizers sf (time - 0.25)
+    return ((), time)
+  wait 0.25
+  finalizerLoop
+
+
 runExpr :: Expr -> IO (AudioContext, OpenThreads)
 runExpr expr = do
   ac <- newAudioContext
   t <- getCurrentTime ac
   ots <- newMVar []
+  sf <- newMVar []
+
   tid <- forkIO $ do
-    (_, _) <- unTimed (eval [] expr >>= evalStatement) ac t ots []
+    (_, _) <- unTimed (eval [] expr >>= evalStatement) ac t ots [] sf
     myThreadId >>= removeOpenThread ots
     return ()
   addOpenThread ots tid
+
+  tid2 <- forkIO $ do
+    (_, _) <- unTimed finalizerLoop ac t ots [] sf
+    return ()
+  addOpenThread ots tid2
+
   return (ac, ots)
 

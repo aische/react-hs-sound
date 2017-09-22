@@ -64,76 +64,83 @@ getFilterType Notch = BiquadFilterTypeNotch
 getFilterType Allpass = BiquadFilterTypeAllpass
 
 
-mkParam :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> AudioParam -> Param -> IO ()
+mkParam :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> AudioParam -> Param -> IO Double
 mkParam ac environment t0 param p =
   case p of
-    ConstParam d ->
+    ConstParam d -> do
       setValue param (realToFrac d)
+      return t0
     EnvParam d ds -> do
       setValueAtTime param (realToFrac d) (realToFrac t0)
       let
-        loop _ [] = return ()
+        loop t1 [] = return t1
         loop t1 ((v,t):ds') = do
           linearRampToValueAtTime param (realToFrac v) (realToFrac (t1 + t))
           loop (t1 + t) ds'
       loop t0 ds
     NodeParam synth -> do
       setValue param 0.0
-      node <- mkNode ac environment t0 synth
+      (node, t1) <- mkNode ac environment t0 synth
       connectParam node param Nothing
+      return t1
 
     VarParam name ->
       case lookup name environment of
         Just (Left synth) -> do
           setValue param 0.0
-          node <- mkNode ac environment t0 synth
+          (node, t1) <- mkNode ac environment t0 synth
           connectParam node param Nothing
+          return t1
 
-        Just (Right node) ->
+        Just (Right node) -> do
           connectParam node param Nothing
+          return t0
 
         Nothing -> do
           print (name ++ " not found")
-          return ()
+          return t0
 
 
-mkNode :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> IO AudioNode
+mkNode :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> IO (AudioNode, Double)
 mkNode ac environment t0 synth =
   case synth of
     Osc wf amp p mb_dur -> do
       osc <- createOscillator ac
       setType osc (getWaveFormType wf)
       freq_param <- getFrequency osc
-      mkParam ac environment t0 freq_param p
+      t1a <- mkParam ac environment t0 freq_param p
       gain <- createGain ac
       gain_param <- getGain gain
       setValue gain_param (realToFrac amp)
       connect osc gain Nothing Nothing
       start osc (Just t0)
+      let t1 = t0 + maybe 0 id mb_dur
       case mb_dur of
         Nothing -> return ()
         Just dur ->
-          stop osc (Just (t0 + dur))
-      return $ toAudioNode gain
+          stop osc (Just t1)
+      return (toAudioNode gain, max t1 t1a)
 
     Gain inputs p -> do
       nodes <- mapM (mkNode ac environment t0) inputs
+      let t1 = maximum $ map snd nodes
       gain <- createGain ac
       gain_param <- getGain gain
-      mkParam ac environment t0 gain_param p
-      mapM_ (\n -> connect n gain Nothing Nothing) nodes
-      return $ toAudioNode gain
+      t1a <- mkParam ac environment t0 gain_param p
+      mapM_ (\(n,_) -> connect n gain Nothing Nothing) nodes
+      return (toAudioNode gain, max t1 t1a)
 
     Filter ft inputs freq q -> do
       nodes <- mapM (mkNode ac environment t0) inputs
+      let t1 = maximum (map snd nodes)
       filterNode <- createBiquadFilter ac
       Filt.setType filterNode (getFilterType ft)
       freq_param <- Filt.getFrequency filterNode
       q_param <- Filt.getQ filterNode
-      mkParam ac environment t0 freq_param freq
-      mkParam ac environment t0 q_param q
-      mapM_ (\n -> connect n filterNode Nothing Nothing) nodes
-      return $ toAudioNode filterNode
+      t1a <- mkParam ac environment t0 freq_param freq
+      t1b <- mkParam ac environment t0 q_param q
+      mapM_ (\(n,_) -> connect n filterNode Nothing Nothing) nodes
+      return (toAudioNode filterNode, max t1 (max t1a t1b))
 
     Var name -> do
       case lookup name environment of
@@ -141,14 +148,15 @@ mkNode ac environment t0 synth =
           mkNode ac environment t0 synth'
 
         Just (Right node) ->
-          return node
+          return (node, t0)
 
         Nothing ->
           error (name ++ " undefined")
 
     Let name synth1 synth2 -> do
-      node1 <- mkNode ac environment t0 synth1
-      mkNode ac ((name, Right node1) : environment) t0 synth2
+      (node1, t1a) <- mkNode ac environment t0 synth1
+      (node2, t1b) <- mkNode ac ((name, Right node1) : environment) t0 synth2
+      return (node2, max t1a t1b)
 
 
 expandSynth :: [(String, Synth)] -> Synth -> Synth
