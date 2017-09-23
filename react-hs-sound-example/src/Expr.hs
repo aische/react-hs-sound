@@ -40,6 +40,7 @@ data Expr
   | FilterExpr FilterType [Expr] Expr Expr -- cutoff-param, q-param
   | LetSynthExpr Name Expr Expr
   | LookupSynthExpr Name
+  | MultSynthExpr Expr Expr
   deriving (Eq, Show, Read)
 
 
@@ -323,6 +324,15 @@ eval environment expr =
 
     LookupSynthExpr n ->
       return $ SynthValue $ Var n
+
+    MultSynthExpr e1 e2 -> do
+      v1 <- eval environment e1
+      v2 <- eval environment e2
+      case (v1, v2) of
+        (SynthValue s1, SynthValue s2) ->
+          return $ SynthValue $ Mult s1 s2
+        _ ->
+          error "let synth: not a synth"
 
     AssignExpr name e enext -> do
       return $ StatementValue environment $ AssignStatement name e enext

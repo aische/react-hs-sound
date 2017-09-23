@@ -9,6 +9,13 @@ import GHCJS.DOM.JSFFI.Generated.AudioParam
 import GHCJS.DOM.JSFFI.Generated.Enums
 import qualified GHCJS.DOM.JSFFI.Generated.BiquadFilterNode as Filt
 
+import GHCJS.DOM.EventTargetClosures
+import GHCJS.DOM.JSFFI.Generated.AudioBuffer hiding (getGain)
+import GHCJS.DOM.EventM
+import GHCJS.DOM.JSFFI.Generated.ScriptProcessorNode
+import GHCJS.DOM.JSFFI.Generated.AudioProcessingEvent
+import Control.Monad.Trans
+
 data Param
   = ConstParam Double
   | EnvParam Double [(Double, Double)]
@@ -23,6 +30,7 @@ data Synth
   | Filter FilterType [Synth] Param Param
   | Let String Synth Synth
   | Var String
+  | Mult Synth Synth
   deriving (Eq, Show, Read)
 
 
@@ -60,51 +68,51 @@ getFilterType Notch = BiquadFilterTypeNotch
 getFilterType Allpass = BiquadFilterTypeAllpass
 
 
-mkParam :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> AudioParam -> Param -> IO Double
+mkParam :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> AudioParam -> Param -> IO (Double, [AudioNode])
 mkParam ac environment t0 param p =
   case p of
     ConstParam d -> do
       setValue param (realToFrac d)
-      return t0
+      return (t0, [])
     EnvParam d ds -> do
       setValueAtTime param (realToFrac d) (realToFrac t0)
       let
-        loop t1 [] = return t1
+        loop t1 [] = return (t1, [])
         loop t1 ((v,t):ds') = do
           linearRampToValueAtTime param (realToFrac v) (realToFrac (t1 + t))
           loop (t1 + t) ds'
       loop t0 ds
     NodeParam synth -> do
       setValue param 0.0
-      (node, t1) <- mkNode ac environment t0 synth
+      (node, t1, finalizers) <- mkNode ac environment t0 synth
       connectParam node param Nothing
-      return t1
+      return (t1, finalizers)
 
     VarParam name ->
       case lookup name environment of
         Just (Left synth) -> do
           setValue param 0.0
-          (node, t1) <- mkNode ac environment t0 synth
+          (node, t1, finalizers) <- mkNode ac environment t0 synth
           connectParam node param Nothing
-          return t1
+          return (t1, finalizers)
 
         Just (Right node) -> do
           connectParam node param Nothing
-          return t0
+          return (t0, [])
 
         Nothing -> do
           print (name ++ " not found")
-          return t0
+          return (t0, [])
 
 
-mkNode :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> IO (AudioNode, Double)
+mkNode :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> IO (AudioNode, Double, [AudioNode])
 mkNode ac environment t0 synth =
   case synth of
     Osc wf amp p mb_dur -> do
       osc <- createOscillator ac
       setType osc (getWaveFormType wf)
       freq_param <- getFrequency osc
-      t1a <- mkParam ac environment t0 freq_param p
+      (t1a, fs1a) <- mkParam ac environment t0 freq_param p
       gain <- createGain ac
       gain_param <- getGain gain
       setValue gain_param (realToFrac amp)
@@ -115,28 +123,30 @@ mkNode ac environment t0 synth =
         Nothing -> return ()
         Just _dur ->
           stop osc (Just t1)
-      return (toAudioNode gain, max t1 t1a)
+      let node = toAudioNode gain
+      return (node, max t1 t1a, node : toAudioNode osc : fs1a)
 
     Gain inputs p -> do
       nodes <- mapM (mkNode ac environment t0) inputs
-      let t1 = maximum $ map snd nodes
+      let t1 = maximum $ map (\(_,t,_) -> t) nodes
       gain <- createGain ac
       gain_param <- getGain gain
-      t1a <- mkParam ac environment t0 gain_param p
-      mapM_ (\(n,_) -> connect n gain Nothing Nothing) nodes
-      return (toAudioNode gain, max t1 t1a)
+      (t1a, fs1a) <- mkParam ac environment t0 gain_param p
+      mapM_ (\(n,_,_) -> connect n gain Nothing Nothing) nodes
+      let node = toAudioNode gain
+      return (toAudioNode gain, max t1 t1a, node : (fs1a ++ (nodes >>= (\(_,_,n) -> n))))
 
     Filter ft inputs freq q -> do
       nodes <- mapM (mkNode ac environment t0) inputs
-      let t1 = maximum (map snd nodes)
+      let t1 = maximum (map (\(_,t,_)->t) nodes)
       filterNode <- createBiquadFilter ac
       Filt.setType filterNode (getFilterType ft)
       freq_param <- Filt.getFrequency filterNode
       q_param <- Filt.getQ filterNode
-      t1a <- mkParam ac environment t0 freq_param freq
-      t1b <- mkParam ac environment t0 q_param q
-      mapM_ (\(n,_) -> connect n filterNode Nothing Nothing) nodes
-      return (toAudioNode filterNode, max t1 (max t1a t1b))
+      (t1a, fs1a) <- mkParam ac environment t0 freq_param freq
+      (t1b, fs1b) <- mkParam ac environment t0 q_param q
+      mapM_ (\(n,_,_) -> connect n filterNode Nothing Nothing) nodes
+      return (toAudioNode filterNode, max t1 (max t1a t1b), toAudioNode filterNode : (nodes >>= (\(_,_,n)->n)) ++ fs1a ++ fs1b)
 
     Var name -> do
       case lookup name environment of
@@ -144,16 +154,34 @@ mkNode ac environment t0 synth =
           mkNode ac environment t0 synth'
 
         Just (Right node) ->
-          return (node, t0)
+          return (node, t0, [])
 
         Nothing ->
           error (name ++ " undefined")
 
     Let name synth1 synth2 -> do
-      (node1, t1a) <- mkNode ac environment t0 synth1
-      (node2, t1b) <- mkNode ac ((name, Right node1) : environment) t0 synth2
-      return (node2, max t1a t1b)
+      (node1, t1a, fs1a) <- mkNode ac environment t0 synth1
+      (node2, t1b, fs1b) <- mkNode ac ((name, Right node1) : environment) t0 synth2
+      return (node2, max t1a t1b, node1 : node2 : (fs1a ++ fs1b))
 
+    Mult synth1 synth2 -> do
+      (node1, t1a, fs1a) <- mkNode ac environment t0 synth1
+      (node2, t1b, fs1b) <- mkNode ac environment t0 synth2
+      cm <- createChannelMerger ac (Just 2)
+      connect node1 cm Nothing (Just 0)
+      connect node2 cm Nothing (Just 1)
+      sp <- createScriptProcessor ac 1024 Nothing Nothing
+      connect cm sp Nothing Nothing
+      on sp audioProcess $ do
+        e <- event -- AudioProcessingEvent
+        inputBuffer <- getInputBuffer e -- AudioBuffer
+        outputBuffer <- getOutputBuffer e -- AudioBuffer
+        iarr1 <- getChannelData inputBuffer 0
+        iarr2 <- getChannelData inputBuffer 1
+        oarr  <- getChannelData outputBuffer 0
+        liftIO $ multFloat32Array iarr1 iarr2 oarr
+
+      return (toAudioNode sp, max t1a t1b, toAudioNode sp : toAudioNode cm : (fs1a ++ fs1b))
 
 expandSynth :: [(String, Synth)] -> Synth -> Synth
 expandSynth env synth =
@@ -180,6 +208,9 @@ expandSynth env synth =
         Nothing ->
           error (name ++ " undefined")
 
+    Mult s1 s2 ->
+      Mult (expandSynth env s1) (expandSynth env s2)
+
 
 expandParam :: [(String, Synth)] -> Param -> Param
 expandParam env synth =
@@ -195,11 +226,11 @@ expandParam env synth =
     NodeParam s ->
       NodeParam (expandSynth env s)
 
-createFloat32Array :: Float -> IO Float32Array
-createFloat32Array f = js_createFloat32Array f
+
+multFloat32Array :: Float32Array -> Float32Array -> Float32Array -> IO ()
+multFloat32Array i1 i2 o =
+  js_multFloat32Array (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o)
 
 foreign import javascript unsafe
-  "Float32Array.from([$1])"
-  js_createFloat32Array      :: Float -> IO Float32Array
-
---  "((function(x){ var arr = new Float32Array(1); arr[0] = x; return arr; })($1))"
+  "$1.map(function(i1, ix){ $3[ix] = i1*$2[ix]})"
+  js_multFloat32Array :: JSVal -> JSVal -> JSVal -> IO ()

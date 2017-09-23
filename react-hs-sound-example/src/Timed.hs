@@ -56,10 +56,10 @@ wait t = Timed $ \ac time _ots _env _sf -> do
 
 playSynth :: Synth -> Timed ()
 playSynth synth = Timed $ \ac time _ots env sf -> do
-  (node, t1) <- mkNode ac env (time + commandLatency) synth
+  (node, t1, fs) <- mkNode ac env (time + commandLatency) synth
   dest <- getDestination ac
   connect node dest Nothing Nothing
-  addScheduledFinalizer sf (t1, disconnect node Nothing)
+  addScheduledFinalizer sf (t1, mapM_ (\n -> disconnect n Nothing) fs)
   return ((), time)
 
 

@@ -285,6 +285,15 @@ pFilter = do
   else
     empty
 
+pMultSynth :: Parser Expr
+pMultSynth = do
+  s1 <- pNameUppercase
+  if s1 == "Mult" then do
+    e1 <- pExpr
+    e2 <- pExpr
+    return (MultSynthExpr e1 e2)
+  else
+    empty
 
 pEnv :: Parser Expr
 pEnv = do
@@ -343,7 +352,7 @@ pOp1 = do
 
 
 pExpr :: Parser Expr
-pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth
+pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth <|> pMultSynth
 
 
 parseExpr :: String -> Maybe Expr
