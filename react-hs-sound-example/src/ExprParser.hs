@@ -295,6 +295,25 @@ pMultSynth = do
   else
     empty
 
+pAddSynth :: Parser Expr
+pAddSynth = do
+  s1 <- pNameUppercase
+  if s1 == "Add" then do
+    e1 <- pExpr
+    e2 <- pExpr
+    return (AddSynthExpr e1 e2)
+  else
+    empty
+
+pDc :: Parser Expr
+pDc = do
+  s1 <- pNameUppercase
+  if s1 == "DC" then do
+    e1 <- pExpr
+    return (DcSynthExpr e1)
+  else
+    empty
+
 pEnv :: Parser Expr
 pEnv = do
   s1 <- pNameUppercase
@@ -352,7 +371,7 @@ pOp1 = do
 
 
 pExpr :: Parser Expr
-pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth <|> pMultSynth
+pExpr = pIf <|> pLet <|> pVar <|> pAbs <|> pApp <|> pBool <|> pFloat <|> pInt <|> pAssign <|> pWait <|> pFork <|> pPlay <|> pLoop <|> pLoopInf <|> pOsc <|> pGain <|> pEnv <|> pFilter <|> pOp2 <|> pOp1 <|> pRandom <|> pDone <|> pLetSynth <|> pLookupSynth <|> pMultSynth <|> pDc <|> pAddSynth
 
 
 parseExpr :: String -> Maybe Expr

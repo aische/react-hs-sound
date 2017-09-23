@@ -41,6 +41,8 @@ data Expr
   | LetSynthExpr Name Expr Expr
   | LookupSynthExpr Name
   | MultSynthExpr Expr Expr
+  | AddSynthExpr Expr Expr
+  | DcSynthExpr Expr
   deriving (Eq, Show, Read)
 
 
@@ -332,7 +334,27 @@ eval environment expr =
         (SynthValue s1, SynthValue s2) ->
           return $ SynthValue $ Mult s1 s2
         _ ->
-          error "let synth: not a synth"
+          error "mult synth: not a synth"
+
+    AddSynthExpr e1 e2 -> do
+      v1 <- eval environment e1
+      v2 <- eval environment e2
+      case (v1, v2) of
+        (SynthValue s1, SynthValue s2) ->
+          return $ SynthValue $ Add s1 s2
+        _ ->
+          error "add synth: not a synth"
+
+    DcSynthExpr e -> do
+      v1 <- eval environment e
+      case v1 of
+        (IntValue i) ->
+          return $ SynthValue $ Dc (fromIntegral i)
+        (FloatValue d) ->
+          return $ SynthValue $ Dc d
+        _ ->
+          error "dc synth: not a number"
+
 
     AssignExpr name e enext -> do
       return $ StatementValue environment $ AssignStatement name e enext

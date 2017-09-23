@@ -30,7 +30,9 @@ data Synth
   | Filter FilterType [Synth] Param Param
   | Let String Synth Synth
   | Var String
+  | Dc Double
   | Mult Synth Synth
+  | Add Synth Synth
   deriving (Eq, Show, Read)
 
 
@@ -164,26 +166,46 @@ mkNode ac environment t0 synth =
       (node2, t1b, fs1b) <- mkNode ac ((name, Right node1) : environment) t0 synth2
       return (node2, max t1a t1b, node1 : node2 : (fs1a ++ fs1b))
 
-    Mult synth1 synth2 -> do
-      (node1, t1a, fs1a) <- mkNode ac environment t0 synth1
-      (node2, t1b, fs1b) <- mkNode ac environment t0 synth2
-      cm <- createChannelMerger ac (Just 2)
-      connect node1 cm Nothing (Just 0)
-      connect node2 cm Nothing (Just 1)
+    Dc v -> do
       sp <- createScriptProcessor ac 1024 Nothing Nothing
-      connect cm sp Nothing Nothing
       on sp audioProcess $ do
         e <- event -- AudioProcessingEvent
-        inputBuffer <- getInputBuffer e -- AudioBuffer
         outputBuffer <- getOutputBuffer e -- AudioBuffer
-        iarr1 <- getChannelData inputBuffer 0
-        iarr2 <- getChannelData inputBuffer 1
         oarr  <- getChannelData outputBuffer 0
         oarr2  <- getChannelData outputBuffer 1
         --liftIO $ multFloat32Array iarr1 iarr2 oarr
-        liftIO $ multFloat32Array2 iarr1 iarr2 oarr oarr2
+        liftIO $ dcFloat32Array2 v oarr oarr2
 
-      return (toAudioNode sp, max t1a t1b, toAudioNode sp : toAudioNode cm : (fs1a ++ fs1b))
+      return (toAudioNode sp, t0, [toAudioNode sp])
+
+    Add synth1 synth2 -> do
+      synthOp2 ac environment t0 synth1 synth2 addFloat32Array2
+
+    Mult synth1 synth2 -> do
+      synthOp2 ac environment t0 synth1 synth2 multFloat32Array2
+
+
+synthOp2 :: AudioContext -> [(String, Either Synth AudioNode)] -> Double -> Synth -> Synth -> (Float32Array -> Float32Array -> Float32Array -> Float32Array -> IO ()) -> IO (AudioNode, Double, [AudioNode])
+synthOp2 ac environment t0 synth1 synth2 func = do
+  (node1, t1a, fs1a) <- mkNode ac environment t0 synth1
+  (node2, t1b, fs1b) <- mkNode ac environment t0 synth2
+  cm <- createChannelMerger ac (Just 2)
+  connect node1 cm Nothing (Just 0)
+  connect node2 cm Nothing (Just 1)
+  sp <- createScriptProcessor ac 1024 Nothing Nothing
+  connect cm sp Nothing Nothing
+  on sp audioProcess $ do
+    e <- event -- AudioProcessingEvent
+    inputBuffer <- getInputBuffer e -- AudioBuffer
+    outputBuffer <- getOutputBuffer e -- AudioBuffer
+    iarr1 <- getChannelData inputBuffer 0
+    iarr2 <- getChannelData inputBuffer 1
+    oarr  <- getChannelData outputBuffer 0
+    oarr2  <- getChannelData outputBuffer 1
+    liftIO $ func iarr1 iarr2 oarr oarr2
+
+  return (toAudioNode sp, max t1a t1b, toAudioNode sp : toAudioNode cm : (fs1a ++ fs1b))
+
 
 expandSynth :: [(String, Synth)] -> Synth -> Synth
 expandSynth env synth =
@@ -233,14 +255,37 @@ multFloat32Array :: Float32Array -> Float32Array -> Float32Array -> IO ()
 multFloat32Array i1 i2 o =
   js_multFloat32Array (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o)
 
+
 multFloat32Array2 :: Float32Array -> Float32Array -> Float32Array -> Float32Array -> IO ()
 multFloat32Array2 i1 i2 o1 o2 =
   js_multFloat32Array2 (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o1) (unFloat32Array o2)
+
+
+addFloat32Array2 :: Float32Array -> Float32Array -> Float32Array -> Float32Array -> IO ()
+addFloat32Array2 i1 i2 o1 o2 =
+  js_addFloat32Array2 (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o1) (unFloat32Array o2)
+
+
+dcFloat32Array2 :: Double -> Float32Array -> Float32Array -> IO ()
+dcFloat32Array2 d o1 o2 =
+  js_dcFloat32Array2 d (unFloat32Array o1) (unFloat32Array o2)
+
 
 foreign import javascript unsafe
   "$1.map(function(i1, ix){ $3[ix] = i1*$2[ix]})"
   js_multFloat32Array :: JSVal -> JSVal -> JSVal -> IO ()
 
+
 foreign import javascript unsafe
   "$1.map(function(i1, ix){ $3[ix] = i1*$2[ix]; $4[ix] = $3[ix];})"
   js_multFloat32Array2 :: JSVal -> JSVal -> JSVal -> JSVal -> IO ()
+
+
+foreign import javascript unsafe
+  "$1.map(function(i1, ix){ $3[ix] = i1+$2[ix]; $4[ix] = $3[ix];})"
+  js_addFloat32Array2 :: JSVal -> JSVal -> JSVal -> JSVal -> IO ()
+
+
+foreign import javascript unsafe
+  "$2.map(function(i1, ix){ $2[ix] = $1; $3[ix] = $2[ix];})"
+  js_dcFloat32Array2 :: Double -> JSVal -> JSVal -> IO ()
