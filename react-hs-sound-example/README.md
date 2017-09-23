@@ -172,4 +172,5 @@ This example uses an infinite loop to play the same patterns over and over. That
       Wait 4
       End
 
-I played this example in Firefox 55.0.3 (OSX) for longer than one hour and there were no glitches. In Chrome I got distortions from time to time. 
+I played this example in Firefox 55.0.3 (OSX) for longer than one hour and there were no glitches. ~~In Chrome I got distortions from time to time. ~~ Edit: After adding finalizers that disconnect audio nodes from the audio context, distortions in Chrome went away.
+
