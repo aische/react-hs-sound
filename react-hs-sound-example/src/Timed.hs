@@ -22,7 +22,7 @@ instance Functor Timed where
 
 
 instance Applicative Timed where
-  pure a = Timed $ \_ac t _ots _env sf -> return (a, t)
+  pure a = Timed $ \_ac t _ots _env _sf -> return (a, t)
   Timed mf <*> Timed ma = Timed $ \ac t ots env sf -> do
     (f, t') <- mf ac t ots env sf
     (a, t'') <- ma ac t' ots env sf
@@ -30,20 +30,20 @@ instance Applicative Timed where
 
 
 instance Monad Timed where
-  return a = Timed $ \_ac t _ots _env sf -> return (a, t)
+  return a = Timed $ \_ac t _ots _env _sf -> return (a, t)
   Timed m >>= f = Timed $ \ac t ots env sf -> do
     (a, t') <- m ac t ots env sf
     unTimed (f a) ac t' ots env sf
 
 
 liftTimed :: IO a -> Timed a
-liftTimed ioa = Timed $ \_ac time _ots _env sf -> do
+liftTimed ioa = Timed $ \_ac time _ots _env _sf -> do
     a <- ioa
     return (a, time)
 
 
 wait :: Double -> Timed ()
-wait t = Timed $ \ac time _ots _env sf -> do
+wait t = Timed $ \ac time _ots _env _sf -> do
   let time' = time + t
   currentTime <- getCurrentTime ac
   let delayTime = round ((time' - currentTime) * 1000000)

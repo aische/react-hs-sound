@@ -2,12 +2,10 @@ module Expr where
 
 
 import GHCJS.DOM.JSFFI.AudioContext
-import GHCJS.DOM.JSFFI.Generated.AudioNode
 import Control.Concurrent
 import System.Random as Rand
 
 
-import Parser
 import Synth
 import Timed
 
@@ -35,7 +33,6 @@ data Expr
   | LoopExpr Expr Expr Expr
   | LoopInfExpr Expr
   | DoneExpr
-  | DcExpr Expr Expr -- amp duration
   | OscExpr WaveForm Expr Expr -- freq-param, duration
   | EnvExpr Expr [(Expr, Expr)]
   | RandomExpr Expr Expr
@@ -128,7 +125,7 @@ applyStatement environment value =
       case synth of
         SynthValue s -> do
           playSynth s
-          return ActionValue
+          return ()
         _ ->
           error "play: not a synth"
       eval environment enext >>= evalStatement
@@ -148,7 +145,7 @@ applyStatement environment value =
           error "wait: not a number"
 
     ForkStatement e enext -> do
-      Timed $ \ac t ots env sf -> do
+      _ <- Timed $ \ac t ots env sf -> do
         tid <- forkIO $ do
           _ <- unTimed (eval environment e >>= evalStatement) ac t ots env sf
           myThreadId >>= removeOpenThread ots

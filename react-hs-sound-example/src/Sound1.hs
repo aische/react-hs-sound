@@ -7,12 +7,9 @@ import GHCJS.DOM.JSFFI.Generated.AudioNode
 import GHCJS.DOM.JSFFI.Generated.OscillatorNode
 import GHCJS.DOM.JSFFI.Generated.GainNode
 import GHCJS.DOM.JSFFI.Generated.AudioParam
-import GHCJS.DOM.JSFFI.Generated.Enums
 import qualified GHCJS.DOM.JSFFI.Generated.BiquadFilterNode as Filt
 import Control.Applicative
 import Control.Concurrent
-import Data.Char as Char
-import System.Random as Rand
 
 
 import Synth
@@ -79,7 +76,7 @@ playSound1 audioCtx sound1 t = do
 
 
 playS1 :: Float -> Timed ()
-playS1 freq = Timed $ \ac time _ots _env sf -> do
+playS1 freq = Timed $ \ac time _ots _env _sf -> do
   playSound1 ac (defaultSound1a { sound1Freq = freq }) (time + commandLatency)
   return ((), time)
 

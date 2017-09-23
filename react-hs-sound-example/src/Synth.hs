@@ -8,10 +8,6 @@ import GHCJS.DOM.JSFFI.Generated.GainNode
 import GHCJS.DOM.JSFFI.Generated.AudioParam
 import GHCJS.DOM.JSFFI.Generated.Enums
 import qualified GHCJS.DOM.JSFFI.Generated.BiquadFilterNode as Filt
-import GHCJS.DOM.JSFFI.Generated.ScriptProcessorNode
-import GHCJS.DOM.JSFFI.Generated.EventTarget
-import GHCJS.DOM.JSFFI.Generated.AudioProcessingEvent
-import GHCJS.DOM.JSFFI.Generated.Event
 
 data Param
   = ConstParam Double
@@ -117,7 +113,7 @@ mkNode ac environment t0 synth =
       let t1 = t0 + maybe 0 id mb_dur
       case mb_dur of
         Nothing -> return ()
-        Just dur ->
+        Just _dur ->
           stop osc (Just t1)
       return (toAudioNode gain, max t1 t1a)
 
