@@ -179,7 +179,9 @@ mkNode ac environment t0 synth =
         iarr1 <- getChannelData inputBuffer 0
         iarr2 <- getChannelData inputBuffer 1
         oarr  <- getChannelData outputBuffer 0
-        liftIO $ multFloat32Array iarr1 iarr2 oarr
+        oarr2  <- getChannelData outputBuffer 1
+        --liftIO $ multFloat32Array iarr1 iarr2 oarr
+        liftIO $ multFloat32Array2 iarr1 iarr2 oarr oarr2
 
       return (toAudioNode sp, max t1a t1b, toAudioNode sp : toAudioNode cm : (fs1a ++ fs1b))
 
@@ -231,6 +233,14 @@ multFloat32Array :: Float32Array -> Float32Array -> Float32Array -> IO ()
 multFloat32Array i1 i2 o =
   js_multFloat32Array (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o)
 
+multFloat32Array2 :: Float32Array -> Float32Array -> Float32Array -> Float32Array -> IO ()
+multFloat32Array2 i1 i2 o1 o2 =
+  js_multFloat32Array2 (unFloat32Array i1) (unFloat32Array i2) (unFloat32Array o1) (unFloat32Array o2)
+
 foreign import javascript unsafe
   "$1.map(function(i1, ix){ $3[ix] = i1*$2[ix]})"
   js_multFloat32Array :: JSVal -> JSVal -> JSVal -> IO ()
+
+foreign import javascript unsafe
+  "$1.map(function(i1, ix){ $3[ix] = i1*$2[ix]; $4[ix] = $3[ix];})"
+  js_multFloat32Array2 :: JSVal -> JSVal -> JSVal -> JSVal -> IO ()
